@@ -1,4 +1,5 @@
 import type { InferInteropZodInput } from "@langchain/core/utils/types";
+import type { BaseMessage } from "@langchain/core/messages";
 
 import type { Client, ClientConfig } from "../client.js";
 import type {
@@ -245,6 +246,14 @@ export interface StreamBase<
     ToolCall,
     keyof SubagentStates & string
   >[];
+
+  /**
+   * Switch to a different thread, clearing the current stream state.
+   * Pass `null` to reset to no thread (a new thread will be created on next submit).
+   *
+   * @param newThreadId - The thread ID to switch to, or `null` to start fresh.
+   */
+  switchThread: (newThreadId: string | null) => void;
 }
 
 /**
@@ -412,17 +421,22 @@ export interface AgentMiddlewareLike<
  * Uses structural matching against AgentMiddleware to extract the state schema
  * type parameter, similar to how langchain's InferMiddlewareState works.
  */
+type SafeInferInteropZodInput<T> = InferInteropZodInput<T> extends never
+  ? // eslint-disable-next-line @typescript-eslint/ban-types
+    {}
+  : InferInteropZodInput<T>;
+
 type InferMiddlewareState<T> =
   // Pattern 1: Match against AgentMiddlewareLike structure to extract TSchema
   T extends AgentMiddlewareLike<infer TSchema, unknown, unknown, unknown>
     ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
       TSchema extends Record<string, any>
-      ? InferInteropZodInput<TSchema>
+      ? SafeInferInteropZodInput<TSchema>
       : // eslint-disable-next-line @typescript-eslint/ban-types
         {}
     : // Pattern 2: Direct stateSchema property (for testing with MockMiddleware)
     T extends { stateSchema: infer S }
-    ? InferInteropZodInput<S>
+    ? SafeInferInteropZodInput<S>
     : // eslint-disable-next-line @typescript-eslint/ban-types
       {};
 
@@ -511,7 +525,7 @@ export type InferAgentState<T> = T extends { "~agentTypes": unknown }
         (ExtractAgentConfig<T>["State"] extends undefined
           ? // eslint-disable-next-line @typescript-eslint/ban-types
             {}
-          : InferInteropZodInput<ExtractAgentConfig<T>["State"]>) &
+          : SafeInferInteropZodInput<ExtractAgentConfig<T>["State"]>) &
         InferMiddlewareStatesFromArray<ExtractAgentConfig<T>["Middleware"]>
   : T extends { "~RunOutput": infer RunOutput }
   ? RunOutput
@@ -1154,6 +1168,22 @@ export interface UseStreamOptions<
    */
   throttle?: number | boolean;
 
+  /**
+   * Enable client-side message queuing. When true, calls to `submit()`
+   * while the agent is busy will be queued and processed sequentially
+   * once the current stream completes.
+   * @default false
+   */
+  queue?: boolean;
+
+  /**
+   * Behavior when a queued submission fails.
+   * - `"continue"`: Skip the failed entry and process the next (default).
+   * - `"stop"`: Halt the queue. Remaining entries stay in `queue.entries`.
+   * @default "continue"
+   */
+  onQueueError?: "continue" | "stop";
+
   // Note: Agent-specific options are defined in their respective option interfaces:
   // - UseAgentStreamOptions: subagentToolNames
   // - UseDeepAgentStreamOptions: filterSubagentMessages
@@ -1176,6 +1206,7 @@ export type AnyStreamOptions<
   // Agent-specific options (optional, only present for agent types)
   subagentToolNames?: string[];
   filterSubagentMessages?: boolean;
+  toMessage?: (chunk: BaseMessage) => Message | BaseMessage;
 };
 
 interface RunMetadataStorage {
@@ -1241,6 +1272,22 @@ export interface SubmitOptions<
 }
 
 /**
+ * Payload for the `stream` method of the `UseStreamTransport` interface.
+ * @template StateType - The type of the stream's state values.
+ * @template Bag - The type of the stream's bag values.
+ */
+export interface UseStreamTransportPayload<
+  StateType extends Record<string, unknown> = Record<string, unknown>,
+  Bag extends BagTemplate = BagTemplate
+> {
+  input: GetUpdateType<Bag, StateType> | null | undefined;
+  context: GetConfigurableType<Bag> | undefined;
+  command: Command | undefined;
+  config: ConfigWithConfigurable<GetConfigurableType<Bag>> | undefined;
+  signal: AbortSignal;
+}
+
+/**
  * Transport used to stream the thread.
  * Only applicable for custom endpoints using `toLangGraphEventStream` or `toLangGraphEventStreamResponse`.
  */
@@ -1248,13 +1295,9 @@ export interface UseStreamTransport<
   StateType extends Record<string, unknown> = Record<string, unknown>,
   Bag extends BagTemplate = BagTemplate
 > {
-  stream: (payload: {
-    input: GetUpdateType<Bag, StateType> | null | undefined;
-    context: GetConfigurableType<Bag> | undefined;
-    command: Command | undefined;
-    config: ConfigWithConfigurable<GetConfigurableType<Bag>> | undefined;
-    signal: AbortSignal;
-  }) => Promise<AsyncGenerator<{ id?: string; event: string; data: unknown }>>;
+  stream: (
+    payload: UseStreamTransportPayload<StateType, Bag>
+  ) => Promise<AsyncGenerator<{ id?: string; event: string; data: unknown }>>;
 }
 
 export type UseStreamCustomOptions<
@@ -1278,6 +1321,8 @@ export type UseStreamCustomOptions<
   | "initialValues"
   | "throttle"
   | "onToolEvent"
+  | "queue"
+  | "onQueueError"
 > & { transport: UseStreamTransport<StateType, Bag> };
 
 /**
@@ -1296,6 +1341,7 @@ export type AnyStreamCustomOptions<
   // Agent-specific options (optional, only present for agent types)
   subagentToolNames?: string[];
   filterSubagentMessages?: boolean;
+  toMessage?: (chunk: BaseMessage) => Message | BaseMessage;
 };
 
 export type CustomSubmitOptions<
