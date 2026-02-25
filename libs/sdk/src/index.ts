@@ -59,6 +59,7 @@ export type {
   MetadataStreamEvent,
   StreamMode,
   ToolProgress,
+  ToolsStreamEvent,
   UpdatesStreamEvent,
   ValuesStreamEvent,
 } from "./types.stream.js";
