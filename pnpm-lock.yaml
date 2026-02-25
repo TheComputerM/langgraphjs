@@ -2418,6 +2418,9 @@ importers:
       webdriverio:
         specifier: ^9.15.0
         version: 9.24.0
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
 
   libs/sdk-react:
     dependencies:
@@ -2615,6 +2618,9 @@ importers:
       webdriverio:
         specifier: ^9.15.0
         version: 9.24.0
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
 
   libs/sdk-vue:
     dependencies:
@@ -2709,6 +2715,9 @@ importers:
       webdriverio:
         specifier: ^9.14.2
         version: 9.24.0
+      zod:
+        specifier: ^4.3.5
+        version: 4.3.5
 
 packages:
 
