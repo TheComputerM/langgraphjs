@@ -134,15 +134,12 @@ type SubagentStreamBase<ToolCall> = Omit<
   | "getToolCalls"
   | "interrupt"
   | "interrupts"
+  | "switchThread"
   | "subagents"
   | "activeSubagents"
   | "getSubagent"
   | "getSubagentsByType"
   | "getSubagentsByMessage"
-  | "nodes"
-  | "activeNodes"
-  | "getNodeStream"
-  | "getNodeStreamsByName"
 > & {
   /** Internal: ID of the AI message that triggered this subagent */
   aiMessageId: string | null;
@@ -248,6 +245,9 @@ export class SubagentManager<ToolCall = DefaultToolCall> {
       // Subagents don't have interrupts yet (future enhancement)
       interrupt: undefined,
       interrupts: [],
+
+      // Subagents don't support thread switching
+      switchThread: () => {},
 
       // Nested subagent tracking (empty for now, future enhancement)
       subagents: new Map<
