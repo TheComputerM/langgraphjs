@@ -68,6 +68,8 @@ export class ChatComponent {
 | `onUpdateEvent` | `(event) => void` | Receive update events from the stream. |
 | `onCustomEvent` | `(event) => void` | Receive custom events from the stream. |
 | `onStop` | `() => void` | Called when the stream is stopped by the user. |
+| `queue` | `boolean` | Enable client-side message queuing. When `true`, calls to `submit()` while the agent is busy are queued and processed sequentially once the current stream completes. Defaults to `false`. |
+| `onQueueError` | `"continue" \| "stop"` | Behavior when a queued submission fails. `"continue"` (default) skips the failed entry; `"stop"` halts the queue. |
 
 ## Return Values
 
@@ -85,6 +87,10 @@ All reactive properties are Angular `Signal` or `WritableSignal` values.
 | `stop()` | `function` | Cancel the active stream. |
 | `setBranch(branch)` | `function` | Switch to a different conversation branch. |
 | `getMessagesMetadata(msg, index?)` | `function` | Get branching and checkpoint metadata for a message. |
+| `queue.entries` | `Signal<ReadonlyArray<QueueEntry>>` | Pending queue entries. Each entry has `id`, `values`, `options`, and `createdAt`. |
+| `queue.size` | `Signal<number>` | Number of pending entries in the queue. |
+| `queue.cancel(id)` | `function` | Remove a specific entry from the queue by ID. Returns `true` if found. |
+| `queue.clear()` | `function` | Remove all entries from the queue. |
 
 ## Type Safety
 
